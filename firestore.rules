@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function prof() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function active() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && prof().active == true; }
+    function boss() { return active() && prof().role == 'boss'; }
+    function inBranch(br) { return active() && (prof().role == 'boss' || prof().branch == br); }
+    function bossExists() { return exists(/databases/$(database)/documents/public/info); }
+    function signed() { return request.resource.data.by == request.auth.uid && request.resource.data.ts == request.time; }
+
+    // Nom de la blanchisserie lisible avant connexion
+    match /public/info {
+      allow read: if true;
+      allow create: if signedIn() && !bossExists();
+      allow update: if boss();
+    }
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || boss());
+      // le premier compte (patron) se crée lui-même ; ensuite seul le patron crée des comptes
+      allow create: if (signedIn() && !bossExists() && request.auth.uid == uid && request.resource.data.role == 'boss')
+                    || (boss() && request.resource.data.role == 'staff');
+      allow update: if boss() && resource.data.role == 'staff' && request.resource.data.role == 'staff';
+      allow delete: if false;
+    }
+    match /settings/main {
+      allow read: if active();
+      allow create: if signedIn() && !bossExists();
+      allow update: if boss();
+    }
+    // Chaque succursale a ses propres données. L'employé ne voit que SA succursale.
+    match /branches/{br}/ledger/{id} {
+      allow read: if inBranch(br);
+      // AJOUT seulement : jamais de modification ni de suppression. L'annulation est réservée au patron.
+      allow create: if inBranch(br) && signed() && (request.resource.data.type != 'void' || boss());
+      allow update, delete: if false;
+    }
+    match /branches/{br}/admin/{id} {
+      allow read: if boss();
+      allow create: if boss() && signed();
+      allow update, delete: if false;
+    }
+    match /branches/{br}/materials/{id} {
+      allow read, write: if boss();
+    }
+  }
+}

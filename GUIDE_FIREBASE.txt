@@ -1,0 +1,86 @@
+BLANCHISSERIE LA REFERENCE – VERSION EN LIGNE
+=============================================
+Les données sont enregistrées en ligne (Firebase, gratuit). Le patron voit tout, en direct,
+depuis son propre téléphone. Chaque employé a son email et son mot de passe.
+Il faut le faire UNE SEULE FOIS, environ 20 minutes. Il faut un compte Google (Gmail).
+
+ÉTAPE 1 – Créer le projet
+ 1. Allez sur https://console.firebase.google.com et connectez-vous avec Gmail.
+ 2. "Créer un projet" -> nom : blanchisserie-reference -> Continuer.
+ 3. Désactivez Google Analytics (pas nécessaire) -> Créer le projet.
+
+ÉTAPE 2 – Activer les comptes (email + mot de passe)
+ 1. Menu de gauche : Build / Création -> Authentication -> "Commencer".
+ 2. Onglet "Sign-in method" -> "Adresse e-mail/Mot de passe" -> activez le premier
+    interrupteur (PAS "lien par e-mail") -> Enregistrer.
+ 3. Onglet Settings -> "Authorized domains" -> Ajouter un domaine :
+    branchicerielareferance.netlify.app   (pour l'email "mot de passe oublié").
+
+ÉTAPE 3 – Créer la base de données
+ 1. Menu : Firestore Database -> "Créer une base de données".
+ 2. Choisissez un emplacement proche (ex. europe-west1 ou eur3) -> Suivant.
+ 3. Choisissez "Mode production" -> Créer.
+ 4. Onglet "Règles" -> effacez tout -> ouvrez le fichier firestore.rules de ce dossier,
+    copiez tout son contenu et collez-le -> bouton "Publier".
+    (Ces règles empêchent de modifier ou effacer une vente, et gardent les dépenses
+     réservées au patron.)
+
+ÉTAPE 4 – Copier la configuration dans l'application
+ 1. Engrenage (en haut à gauche) -> "Paramètres du projet".
+ 2. En bas : "Vos applications" -> icône web  </>  -> nom : laverie -> Enregistrer.
+    (ne cochez pas Firebase Hosting)
+ 3. Vous voyez un bloc "firebaseConfig = { apiKey: ..., authDomain: ... }".
+ 4. Ouvrez le fichier firebase-config.js de ce dossier (Bloc-notes) et remplacez chaque
+    valeur "PASTE..." par la vôtre, entre les guillemets. Enregistrez.
+    (Cette clé n'est pas un mot de passe : la sécurité vient des règles de l'étape 3.)
+
+ÉTAPE 5 – Mettre en ligne sur Netlify
+ 1. Netlify -> votre site -> onglet Deploys -> glissez-déposez le DOSSIER entier
+    (index.html, firebase-config.js, sw.js, icônes...). Pas le fichier .zip.
+ 2. Ouvrez https://branchicerielareferance.netlify.app
+
+SUCCURSALES (2 par défaut)
+ - Chaussée Prince Louis Rwagasore  (tickets R-XXXX)
+ - Avenue de Luxembourg n°4         (tickets L-XXXX)
+ Chaque succursale a ses propres commandes, caisse, dépenses, matériel et tableau de bord.
+ Chaque employé est rattaché à UNE succursale et ne voit que celle-là.
+ Le patron voit "Toutes" (comparaison + total) ou choisit une succursale en haut de l'écran.
+ Les noms se modifient dans Plus -> Réglages. Les tarifs sont les mêmes pour les deux.
+
+ÉTAPE 6 – Premier démarrage
+ 1. La page "Première configuration" apparaît. Le PATRON la remplit en premier
+    (nom, email, mot de passe de 6 caractères minimum, numéro WhatsApp du patron).
+    Seul le premier compte peut être patron.
+ 2. Patron : Plus -> Employés -> "+ Ajouter un employé" (nom, email, mot de passe, SUCCURSALE).
+    Donnez-lui son email et son mot de passe.
+ 3. Chaque employé ouvre le site sur son téléphone et se connecte. Chaque reçu porte son nom.
+ 4. Installer sur l'écran d'accueil : Chrome -> menu ⋮ -> "Ajouter à l'écran d'accueil".
+ 5. Patron : onglet Aujourd'hui -> "Activer les alertes du téléphone".
+
+NOTIFICATIONS AU PATRON
+ - Application ouverte : un message 🔔 apparaît dès qu'un employé enregistre une vente,
+   un paiement, un crédit ou une remise. Le journal (📣) garde tout.
+ - WhatsApp : après chaque opération, l'employé touche "Envoyer au patron" (WhatsApp s'ouvre
+   avec le message prêt). L'envoi 100 % automatique n'est pas possible gratuitement.
+ - Application fermée : pas d'alerte automatique dans cette version.
+
+LIMITES DU PLAN GRATUIT (Firebase Spark)
+ - Environ 50 000 lectures et 20 000 écritures par jour, 1 Go de données. Une petite
+   blanchisserie reste très en dessous. Chaque vente = 2 à 6 écritures.
+ - Si la limite est dépassée, l'application s'arrête jusqu'au lendemain (rien n'est facturé
+   sans carte bancaire).
+ - Chaque téléphone charge les 45 derniers jours (réglable : HISTORY_DAYS dans firebase-config.js).
+ - Sauvegarde : Plus -> Réglages -> "Télécharger une sauvegarde".
+
+MOT DE PASSE OUBLIÉ
+ - Écran de connexion -> "Mot de passe oublié ?" (entrez l'email d'abord) ou
+   patron : Plus -> Employés -> bouton "Mot de passe" envoie un email de réinitialisation.
+
+=============================================
+ENGLISH SUMMARY
+ 1 Create a Firebase project (console.firebase.google.com).
+ 2 Authentication -> enable Email/Password; add your Netlify domain in Authorized domains.
+ 3 Firestore Database -> create in production mode -> Rules tab -> paste firestore.rules -> Publish.
+ 4 Project settings -> add Web app -> copy the config into firebase-config.js.
+ 5 Drag the whole folder onto Netlify Deploys.
+ 6 Open the site: the first account created becomes the boss; add staff under More -> Staff.
