@@ -19,7 +19,12 @@ service cloud.firestore {
       allow read: if signedIn() && (request.auth.uid == uid || boss());
       // le premier compte (patron) se crée lui-même ; ensuite seul le patron crée des comptes
       allow create: if (signedIn() && !bossExists() && request.auth.uid == uid && request.resource.data.role == 'boss')
-                    || (boss() && request.resource.data.role == 'staff');
+                    || (boss() && request.resource.data.role == 'staff')
+                    // inscription d'un employé : compte EN ATTENTE, sans accès tant que le patron n'a pas approuvé
+                    || (signedIn() && bossExists() && request.auth.uid == uid
+                        && request.resource.data.keys().hasOnly(['name','email','role','active','status','branch'])
+                        && request.resource.data.role == 'staff' && request.resource.data.active == false
+                        && request.resource.data.status == 'pending');
       allow update: if boss() && resource.data.role == 'staff' && request.resource.data.role == 'staff';
       allow delete: if false;
     }
@@ -32,7 +37,7 @@ service cloud.firestore {
     match /branches/{br}/ledger/{id} {
       allow read: if inBranch(br);
       // AJOUT seulement : jamais de modification ni de suppression. L'annulation est réservée au patron.
-      allow create: if inBranch(br) && signed() && (request.resource.data.type != 'void' || boss());
+      allow create: if inBranch(br) && signed() && (!(request.resource.data.type in ['void','expvoid']) || boss());
       allow update, delete: if false;
     }
     match /branches/{br}/admin/{id} {

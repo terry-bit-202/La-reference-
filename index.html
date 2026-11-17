@@ -107,7 +107,7 @@ const FB=(()=>{
   const c=await M.createUserWithEmailAndPassword(auth,o.email,o.pw),uid=c.user.uid;
   try{const b=M.writeBatch(db);
    b.set(M.doc(db,'users',uid),{name:o.name,email:o.email,role:'boss',active:true,branch:'all'});
-   b.set(M.doc(db,'public','info'),{setupDone:true,shop:o.shop});
+   b.set(M.doc(db,'public','info'),{setupDone:true,shop:o.shop,branches:o.branches});
    b.set(M.doc(db,'settings','main'),{shop:o.shop,ownerPhone:o.phone,waAuto:true,services:o.services,branches:o.branches});
    await b.commit()}catch(e){try{await M.signOut(auth)}catch(x){}throw e}
   return{uid,email:o.email}}
@@ -129,18 +129,24 @@ const FB=(()=>{
  function append(coll,data,p,br){const ref=M.doc(M.collection(db,'branches/'+br+'/'+coll));
   M.setDoc(ref,Object.assign({},data,{by:p.uid,byName:p.name,ts:M.serverTimestamp()})).catch(W);return ref.id}
  function saveSettings(o){M.updateDoc(M.doc(db,'settings','main'),o).catch(W);
-  if(o.shop)M.updateDoc(M.doc(db,'public','info'),{shop:o.shop}).catch(()=>{})}
+  const pu={};if(o.shop)pu.shop=o.shop;if(o.branches)pu.branches=o.branches;if(Object.keys(pu).length)M.updateDoc(M.doc(db,'public','info'),pu).catch(()=>{})}
  const matSet=(br,id,d)=>M.setDoc(M.doc(db,'branches/'+br+'/materials',id),d).catch(W);
  const matDel=(br,id)=>M.deleteDoc(M.doc(db,'branches/'+br+'/materials',id)).catch(W);
  async function createStaff(o){
   const sec=M.initializeApp(app.options,'sec'+Date.now());
   try{const a=M.getAuth(sec),c=await M.createUserWithEmailAndPassword(a,o.email,o.pw);
-   await M.setDoc(M.doc(db,'users',c.user.uid),{name:o.name,email:o.email,role:'staff',active:true,branch:o.branch});
+   await M.setDoc(M.doc(db,'users',c.user.uid),{name:o.name,email:o.email,role:'staff',active:true,status:'approved',branch:o.branch});
    await M.signOut(a)}
   finally{try{await M.deleteApp(sec)}catch(e){}}}
- const setActive=(uid,v)=>M.updateDoc(M.doc(db,'users',uid),{active:v}).catch(W);
+ const setActive=(uid,v)=>M.updateDoc(M.doc(db,'users',uid),{active:v,status:v?'approved':'disabled'}).catch(W);
+ const reject=uid=>M.updateDoc(M.doc(db,'users',uid),{active:false,status:'rejected'}).catch(W);
+ async function signupStaff(o){
+  const c=await M.createUserWithEmailAndPassword(auth,o.email,o.pw);
+  try{await M.setDoc(M.doc(db,'users',c.user.uid),{name:o.name,email:o.email,role:'staff',active:false,status:'pending',branch:o.branch})}
+  catch(e){try{await c.user.delete()}catch(x){try{await M.signOut(auth)}catch(y){}}throw e}
+  await M.signOut(auth)}
  const setBranch=(uid,br)=>M.updateDoc(M.doc(db,'users',uid),{branch:br}).catch(W);
- return{init,onAuth,login,logout,forgot,publicInfo,getProfile,setupBoss,sub,stop,append,saveSettings,matSet,matDel,createStaff,setActive,setBranch,onWriteError:null}
+ return{init,onAuth,login,logout,forgot,publicInfo,getProfile,setupBoss,sub,stop,append,saveSettings,matSet,matDel,createStaff,setActive,reject,signupStaff,setBranch,onWriteError:null}
 })();
 /*BACKEND-END*/
 const TX={
@@ -160,7 +166,7 @@ settings:'Réglages',shop:'Nom de la blanchisserie',backup:'Sauvegarde',lang:'En
 materials:'Matériel et produits',addMat:'+ Ajouter un matériel',useMat:'Utiliser',qtyUse:'Quantité utilisée',restockMat:'Réapprovisionner',unitCost:'Coût unitaire (FBu)',asExpense:'Enregistrer comme dépense du jour',matValue:'Valeur totale du matériel',qty:'Quantité',name:'Nom',
 login:'Connexion',email:'Email',pin:'Mot de passe',signin:'Se connecter',signout:'Déconnexion',badLogin:'Email ou mot de passe incorrect',wait:'Trop d’essais, patientez un moment',setupT:'Première configuration',bossName:'Nom du patron',setupBtn:'Créer le compte patron',staff:'Employés',addStaff:'+ Ajouter un employé',staffName:'Nom complet',active:'Réactiver',inactive:'Désactiver',role_boss:'Patron',role_staff:'Employé',emailUsed:'Email déjà utilisé',pinRule:'Mot de passe : 6 caractères minimum',credit:'Crédit',creditSale:'Vente à crédit (le client paiera plus tard)',payBy:'Date de paiement promise',creditTag:'💳 CRÉDIT',toBoss:'Envoyer au patron (WhatsApp)',receipt:'Reçu',servedBy:'Servi par',handCredit:'Remettre – le reste à crédit',handPay:'Remettre et encaisser',creditHint:'Montant payé maintenant. Mettez 0 pour un crédit total.',waAuto:'Proposer l’envoi WhatsApp au patron après chaque opération',lateCredit:'Crédit en retard',feedNew:'nouveaux événements',byEmp:'Encaissé par employé',
 feed:'Journal',sendMe:'Recevoir le résumé du jour',ownerPh:'Numéro du patron (WhatsApp)',hint:'Chaque étape est enregistrée en ligne, datée et signée. Rien ne s’efface : une commande se corrige par une annulation avec raison.',debts:'Soldes impayés',nodata:'Aucune donnée',pcs:'pièces',
-loading:'Chargement…',cfgT:'Configuration en ligne manquante',cfgB:'Le fichier firebase-config.js n’est pas encore rempli. Suivez le guide GUIDE_FIREBASE.txt, puis rechargez cette page.',loadErr:'Impossible de se connecter. Internet est nécessaire la première fois. Vérifiez la connexion puis réessayez.',retry:'Réessayer',forgot:'Mot de passe oublié ?',resetSent:'Email de réinitialisation envoyé',askEmail:'Entrez d’abord votre email',noAccess:'Compte non autorisé ou désactivé. Contactez le patron.',alertsOn:'Activer les alertes du téléphone',download:'Télécharger une sauvegarde',offline:'Hors ligne : les opérations seront envoyées au retour d’internet',errWrite:'Opération refusée ou impossible',resetPw:'Mot de passe',search:'Rechercher (ticket, nom, téléphone)',staffAdded:'Employé créé',tab:'Onglet',branch:'Succursale',allBr:'Toutes les succursales',allShort:'Toutes',compare:'Comparaison des succursales',pickBr:'Choisissez une succursale',vsYest:'par rapport à hier',topSvc:'Services les plus rentables (ce mois)',reports:'Rapports',exportCsv:'Exporter les paiements (Excel / CSV)',print:'Imprimer le reçu',changeBr:'Changer de succursale',brNames:'Noms des succursales',openDash:'Tableau de bord',thisMonth:'Ce mois',lastMonth:'Mois dernier',collected:'Encaissé',netM:'Net',nbJobs:'Cmd.',creditOut:'Crédits à recouvrer',activeJobs:'En cours',byEmpM:'Encaissé par employé (ce mois)',todayT:'Aujourd’hui'},
+loading:'Chargement…',cfgT:'Configuration en ligne manquante',cfgB:'Le fichier firebase-config.js n’est pas encore rempli. Suivez le guide GUIDE_FIREBASE.txt, puis rechargez cette page.',loadErr:'Impossible de se connecter. Internet est nécessaire la première fois. Vérifiez la connexion puis réessayez.',retry:'Réessayer',forgot:'Mot de passe oublié ?',resetSent:'Email de réinitialisation envoyé',askEmail:'Entrez d’abord votre email',noAccess:'Compte non autorisé ou désactivé. Contactez le patron.',alertsOn:'Activer les alertes du téléphone',download:'Télécharger une sauvegarde',offline:'Hors ligne : les opérations seront envoyées au retour d’internet',errWrite:'Opération refusée ou impossible',resetPw:'Mot de passe',search:'Rechercher (ticket, nom, téléphone)',staffAdded:'Employé créé',tab:'Onglet',branch:'Succursale',allBr:'Toutes les succursales',allShort:'Toutes',compare:'Comparaison des succursales',pickBr:'Choisissez une succursale',vsYest:'par rapport à hier',topSvc:'Services les plus rentables (ce mois)',reports:'Rapports',exportCsv:'Exporter les paiements (Excel / CSV)',print:'Imprimer le reçu',changeBr:'Changer de succursale',brNames:'Noms des succursales',openDash:'Tableau de bord',thisMonth:'Ce mois',lastMonth:'Mois dernier',collected:'Encaissé',netM:'Net',nbJobs:'Cmd.',creditOut:'Crédits à recouvrer',activeJobs:'En cours',byEmpM:'Encaissé par employé (ce mois)',todayT:'Aujourd’hui',signupBtn:'Je suis un nouvel employé : créer mon compte',signupT:'Créer mon compte employé',pwd2:'Confirmer le mot de passe',pwMismatch:'Les mots de passe ne sont pas identiques',pendingMsg:'Compte créé. Attendez l’approbation du patron, puis connectez-vous.',stillPending:'Votre compte attend encore l’approbation du patron.',rejectedMsg:'Votre demande a été refusée. Contactez le patron.',approve:'Approuver',reject:'Refuser',pendingT:'Employés en attente d’approbation',newPending:'Nouvel employé en attente',backLogin:'← Retour à la connexion',yourName:'Votre nom complet',yourBranch:'Votre succursale de travail',expToday:'Dépenses du jour',category:'Catégorie',catSel:'— choisir —'},
 en:{new:'New',jobs:'Jobs',today:'Today',more:'More',cash:'Cash',mobile:'Mobile money',
 recv:'Received',wash:'Washing',ready:'Ready',done:'Collected',void:'Voided',active:'Active',all:'All',
 nWash:'Start washing',nReady:'Mark ready',nDone:'Hand over to customer',
@@ -177,7 +183,7 @@ settings:'Settings',shop:'Laundry name',backup:'Backup',lang:'Français',saved:'
 materials:'Materials & supplies',addMat:'+ Add material',useMat:'Use',qtyUse:'Quantity used',restockMat:'Restock',unitCost:'Unit cost (FBu)',asExpense:'Record as today’s expense',matValue:'Total value of materials',qty:'Quantity',name:'Name',
 login:'Sign in',email:'Email',pin:'Password',signin:'Sign in',signout:'Sign out',badLogin:'Wrong email or password',wait:'Too many tries, please wait a moment',setupT:'First-time setup',bossName:'Boss name',setupBtn:'Create boss account',staff:'Staff',addStaff:'+ Add staff member',staffName:'Full name',active:'Reactivate',inactive:'Deactivate',role_boss:'Boss',role_staff:'Staff',emailUsed:'Email already used',pinRule:'Password: at least 6 characters',credit:'Credit',creditSale:'Credit sale (customer will pay later)',payBy:'Promised payment date',creditTag:'💳 CREDIT',toBoss:'Send to boss (WhatsApp)',receipt:'Receipt',servedBy:'Served by',handCredit:'Hand over – rest on credit',handPay:'Hand over and collect',creditHint:'Amount paid now. Enter 0 for a full credit.',waAuto:'Offer WhatsApp message to the boss after each operation',lateCredit:'Credit overdue',feedNew:'new events',byEmp:'Collected by employee',
 feed:'Feed',sendMe:'Get today’s summary',ownerPh:'Boss’s number (WhatsApp)',hint:'Every step is saved online, time-stamped and signed. Nothing is erased: a job is corrected by voiding it with a reason.',debts:'Unpaid balances',nodata:'No data',pcs:'pieces',
-loading:'Loading…',cfgT:'Online setup missing',cfgB:'The file firebase-config.js is not filled in yet. Follow GUIDE_FIREBASE.txt, then reload this page.',loadErr:'Cannot connect. Internet is needed the first time. Check the connection and try again.',retry:'Try again',forgot:'Forgot password?',resetSent:'Reset email sent',askEmail:'Enter your email first',noAccess:'Account not authorised or deactivated. Contact the boss.',alertsOn:'Turn on phone alerts',download:'Download a backup',offline:'Offline: operations will be sent when the internet returns',errWrite:'Operation refused or failed',resetPw:'Password',search:'Search (ticket, name, phone)',staffAdded:'Staff account created',tab:'Tab',branch:'Branch',allBr:'All branches',allShort:'All',compare:'Branch comparison',pickBr:'Choose a branch',vsYest:'vs yesterday',topSvc:'Top earning services (this month)',reports:'Reports',exportCsv:'Export payments (Excel / CSV)',print:'Print receipt',changeBr:'Change branch',brNames:'Branch names',openDash:'Dashboard',thisMonth:'This month',lastMonth:'Last month',collected:'Collected',netM:'Net',nbJobs:'Jobs',creditOut:'Credit to collect',activeJobs:'Active',byEmpM:'Collected by employee (this month)',todayT:'Today'}};
+loading:'Loading…',cfgT:'Online setup missing',cfgB:'The file firebase-config.js is not filled in yet. Follow GUIDE_FIREBASE.txt, then reload this page.',loadErr:'Cannot connect. Internet is needed the first time. Check the connection and try again.',retry:'Try again',forgot:'Forgot password?',resetSent:'Reset email sent',askEmail:'Enter your email first',noAccess:'Account not authorised or deactivated. Contact the boss.',alertsOn:'Turn on phone alerts',download:'Download a backup',offline:'Offline: operations will be sent when the internet returns',errWrite:'Operation refused or failed',resetPw:'Password',search:'Search (ticket, name, phone)',staffAdded:'Staff account created',tab:'Tab',branch:'Branch',allBr:'All branches',allShort:'All',compare:'Branch comparison',pickBr:'Choose a branch',vsYest:'vs yesterday',topSvc:'Top earning services (this month)',reports:'Reports',exportCsv:'Export payments (Excel / CSV)',print:'Print receipt',changeBr:'Change branch',brNames:'Branch names',openDash:'Dashboard',thisMonth:'This month',lastMonth:'Last month',collected:'Collected',netM:'Net',nbJobs:'Jobs',creditOut:'Credit to collect',activeJobs:'Active',byEmpM:'Collected by employee (this month)',todayT:'Today',signupBtn:'I am a new employee: create my account',signupT:'Create my employee account',pwd2:'Confirm password',pwMismatch:'Passwords do not match',pendingMsg:'Account created. Wait for the boss to approve it, then sign in.',stillPending:'Your account is still waiting for the boss’s approval.',rejectedMsg:'Your request was declined. Contact the boss.',approve:'Approve',reject:'Decline',pendingT:'Employees waiting for approval',newPending:'New employee waiting',backLogin:'← Back to sign in',yourName:'Your full name',yourBranch:'Branch where you work',expToday:'Today’s expenses',category:'Category',catSel:'— choose —'}};
 const t=k=>TX[S.lang][k]??k;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -218,8 +224,10 @@ const pickBr=d=>d.br||wb();
 const ms=v=>v&&typeof v.toMillis==='function'?v.toMillis():(typeof v==='number'?v:Date.now());
 const cmp=(a,b)=>ms(a.ts)-ms(b.ts)||String(a.id).localeCompare(String(b.id));
 function rebuild(){
- const tag=m=>Object.entries(m).flatMap(([br,l])=>l.map(e=>Object.assign({},e,{br})));const ents=tag(RAW.ledger).sort(cmp),J=new Map();
+ const tag=m=>Object.entries(m).flatMap(([br,l])=>l.map(e=>Object.assign({},e,{br})));const ents=tag(RAW.ledger).sort(cmp),J=new Map(),EX=[],VX=new Set();
  for(const e of ents){const tt=ms(e.ts);
+  if(e.type==='expense'){EX.push({id:e.id,led:true,br:e.br,t:tt,label:e.label,amt:e.amt,cat:e.cat||'',by:e.byName||'-'});continue}
+  if(e.type==='expvoid'){VX.add(e.eid);continue}
   if(e.type==='job'){if(J.has(e.jid))continue;J.set(e.jid,{id:e.jid,br:e.br,no:e.no,t:tt,cust:e.cust,phone:e.phone||'',items:e.items||[],pieces:e.pieces||1,due:e.due,note:e.note||'',status:'recv',log:[{t:tt,s:'recv',by:e.byName||'-'}],pay:[],credit:e.credit?{by:e.byName,payBy:e.credit.payBy,t:tt}:null,void:false});continue}
   const j=J.get(e.jid);if(!j)continue;
   if(e.type==='status'){j.status=e.s;j.log.push({t:tt,s:e.s,by:e.byName||'-'})}
@@ -228,7 +236,7 @@ function rebuild(){
   else if(e.type==='void'){j.void=true;j.reason=e.reason;j.voidAt=tt}}
  S.jobs=[...J.values()];
  const adm=tag(RAW.admin).sort(cmp);
- S.expenses=adm.filter(e=>e.type==='expense').map(e=>({id:e.id,br:e.br,t:ms(e.ts),label:e.label,amt:e.amt,by:e.byName}));
+ S.expenses=adm.filter(e=>e.type==='expense').map(e=>({id:e.id,br:e.br,t:ms(e.ts),label:e.label,amt:e.amt,by:e.byName})).concat(EX.filter(x=>!VX.has(x.id)));
  S.closes=adm.filter(e=>e.type==='close').map(e=>({br:e.br,day:e.day,expected:e.expected,counted:e.counted,t:ms(e.ts),by:e.byName}));
  const jm=new Map(S.jobs.map(j=>[j.id,j]));
  S.events=[...ents,...adm].sort(cmp).map(e=>({br:e.br,t:ms(e.ts),by:e.byName||'-',type:e.type,s:e.s,text:evText(e,jm)}))}
@@ -239,6 +247,7 @@ function evText(e,jm){const j=jm.get(e.jid),tag=j?`#${j.no} ${j.cust}`:'#?';
   case 'pay':return e.amt<0?L(`Remboursement ${fmt(-e.amt)} – ${tag}`,`Refund ${fmt(-e.amt)} – ${tag}`):L(`${e.k==='deposit'?'Avance':'Paiement'} ${fmt(e.amt)} (${t(e.m)}) – ${tag}`,`${e.k==='deposit'?'Deposit':'Payment'} ${fmt(e.amt)} (${t(e.m)}) – ${tag}`);
   case 'credit':return L(`💳 CRÉDIT – ${tag} – à payer avant le ${dd(e.payBy)}`,`💳 CREDIT – ${tag} – to pay by ${dd(e.payBy)}`);
   case 'void':return L(`⚠ ${tag} ANNULÉE : ${e.reason}`,`⚠ ${tag} VOIDED: ${e.reason}`);
+  case 'expvoid':return L(`⚠ Dépense annulée : ${e.label}`,`⚠ Expense voided: ${e.label}`);
   case 'expense':return L(`Dépense ${fmt(e.amt)} – ${e.label}`,`Expense ${fmt(e.amt)} – ${e.label}`);
   case 'close':{const df=e.counted-e.expected;return L(`Journée clôturée – caisse ${df===0?'correcte':(df<0?'manque ':'excédent ')+fmt(Math.abs(df))}`,`Day closed – cash ${df===0?'matches':(df<0?'missing ':'extra ')+fmt(Math.abs(df))}`)}
   default:return e.text||e.type}}
@@ -318,14 +327,29 @@ const vSetup=()=>`<div class="card" style="text-align:center"><img src="${LOGO}"
 const vLogin=()=>`<div class="card" style="text-align:center"><img src="${LOGO}" style="height:120px"><h2 style="margin:8px 0 14px">${esc(S.shop)}</h2>
  <form data-f="login" style="text-align:left"><label>${t('email')}</label><input id="fe" name="e" type="email" inputmode="email" autocomplete="username" required>
  <label>${t('pin')}</label><input name="p" type="password" autocomplete="current-password" required><button class="btn">${t('signin')}</button></form>
- <button class="btn sm s" data-a="forgot" style="margin-top:10px">${t('forgot')}</button></div>
+ <button class="btn sm s" data-a="forgot" style="margin-top:10px">${t('forgot')}</button><div style="font-size:11px;color:var(--m);margin-top:10px">v4 · 17.11.2026</div></div>
+ <button class="btn s" data-a="gosignup" style="margin-bottom:10px">👤 ${t('signupBtn')}</button>
  <button class="btn sm s" data-a="lang">🌐 ${t('lang')}</button>`;
 function vState(){
  if(STATE==='loading')return`<div class="card empty"><img src="${LOGO}" style="height:90px"><br>${t('loading')}</div>`;
  if(STATE==='noconfig')return`<div class="card"><h3>${t('cfgT')}</h3><p>${t('cfgB')}</p></div>`;
  if(STATE==='loaderr')return`<div class="card"><p>${t('loadErr')}</p><button class="btn" data-a="reload">${t('retry')}</button></div>`;
  if(STATE==='setup')return vSetup();
+ if(STATE==='signup')return vSignup();
  return vLogin()}
+const vSignup=()=>`<div class="card" style="text-align:center"><img src="${LOGO}" style="height:90px"><h2 style="margin:8px 0 0">${t('signupT')}</h2></div>
+ <div class="card"><form data-f="signup"><label>${t('yourName')}</label><input name="n" required autocomplete="name">
+ <label>${t('email')}</label><input name="e" type="email" inputmode="email" required autocomplete="username">
+ <label>${t('yourBranch')}</label><select name="br" required><option value="">—</option>${(S.branches.length?S.branches:NEWBR).map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select>
+ <label>${t('pin')}</label><input name="p" type="password" minlength="6" autocomplete="new-password" required>
+ <label>${t('pwd2')}</label><input name="p2" type="password" minlength="6" autocomplete="new-password" required>
+ <button class="btn">${t('signupT')}</button></form></div>
+ <button class="btn sm s" data-a="backlogin">${t('backLogin')}</button>`;
+async function doSignup(f){const g=n=>f.elements[n].value.trim(),pw=f.elements.p.value;
+ if(pw.length<6)return toast(t('pinRule'));if(pw!==f.elements.p2.value)return toast(t('pwMismatch'));if(!g('br'))return toast(t('pickBr'));
+ settingUp=true;
+ try{await FB.signupStaff({name:g('n'),email:g('e').toLowerCase(),pw,branch:g('br')});settingUp=false;STATE='login';render();toast(t('pendingMsg'))}
+ catch(e){settingUp=false;console.error(e);toast(authMsg(e))}}
 function authMsg(e){const c=(e&&e.code)||'';
  if(/invalid-credential|wrong-password|user-not-found|invalid-email/.test(c))return t('badLogin');
  if(/too-many/.test(c))return t('wait');if(/network/.test(c))return t('offline');
@@ -341,19 +365,19 @@ async function boot(){
 async function onAuthChange(u){
  if(settingUp)return;
  if(!u){stopApp();STATE='login';
-  try{const info=await FB.publicInfo();if(info){S.shop=info.shop||S.shop}else STATE='setup'}catch(e){console.error(e)}
+  try{const info=await FB.publicInfo();if(info){S.shop=info.shop||S.shop;if(info.branches&&info.branches.length)S.branches=info.branches}else STATE='setup'}catch(e){console.error(e)}
   render();return}
  await enter(u)}
 async function enter(u){
  let p=null;try{p=await FB.getProfile(u.uid)}catch(e){console.error(e)}
- if(!p||p.active===false){toast(t('noAccess'));await FB.logout();return}
+ if(!p||p.active===false){toast(p&&p.status==='pending'?t('stillPending'):p&&p.status==='rejected'?t('rejectedMsg'):t('noAccess'));await FB.logout();return}
  if(p.role!=='boss'&&!p.branch){toast(t('noAccess'));await FB.logout();return}
  ME={uid:u.uid,name:p.name,email:p.email,role:p.role,branch:p.branch};S.view='all';
  try{S.seen=+localStorage.getItem('lf_seen_'+ME.uid)||0}catch(e){}
  STATE='app';tab=ME.role==='boss'?'today':'new';sub='';
- FB.sub(ME,{settings:onSettings,ledger:onLedger,admin:onAdmin,materials:(br,l)=>{RAW.mat[br]=l;S.materials=Object.entries(RAW.mat).flatMap(([b,x])=>x.map(m=>Object.assign({},m,{br:b})));refresh()},users:l=>{S.users=l;refresh()},error:e=>console.error(e)});
+ FB.sub(ME,{settings:onSettings,ledger:onLedger,admin:onAdmin,materials:(br,l)=>{RAW.mat[br]=l;S.materials=Object.entries(RAW.mat).flatMap(([b,x])=>x.map(m=>Object.assign({},m,{br:b})));refresh()},users:l=>{const old=new Set(S.users.filter(u=>u.status==='pending').map(u=>u.id)),first=!S.usersLoaded;S.usersLoaded=true;S.users=l;if(!first)l.filter(u=>u.status==='pending'&&!old.has(u.id)).forEach(u=>{toast('🔔 '+t('newPending')+' : '+u.name+' ('+brName(u.branch)+')');try{navigator.vibrate&&navigator.vibrate(150)}catch(x){}});refresh()},error:e=>console.error(e)});
  render();scrollTo(0,0)}
-function stopApp(){FB.stop();ME=null;RAW={ledger:{},admin:{},mat:{}};S.branches=[];S.jobs=[];S.expenses=[];S.closes=[];S.events=[];S.users=[];S.materials=[];S.services=[]}
+function stopApp(){S.usersLoaded=false;FB.stop();ME=null;RAW={ledger:{},admin:{},mat:{}};S.branches=[];S.jobs=[];S.expenses=[];S.closes=[];S.events=[];S.users=[];S.materials=[];S.services=[]}
 async function doLogin(f){try{await FB.login(f.elements.e.value.trim(),f.elements.p.value)}catch(e){toast(authMsg(e))}}
 async function doSetup(f){const g=n=>f.elements[n].value.trim(),pw=f.elements.p.value;
  if(pw.length<6)return toast(t('pinRule'));
@@ -467,21 +491,25 @@ function downloadCsv(){const q=v=>'"'+String(v).replace(/"/g,'""')+'"',rows=[['D
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+rows.join('\n')],{type:'text/csv'}));a.download='paiements-'+dk(Date.now())+'.csv';document.body.appendChild(a);a.click();a.remove()}
 
 /* ---------- MORE ---------- */
+function vExp(){const d0=today(),es=S.expenses.filter(inV).filter(e=>isBoss()||dk(e.t)===d0).sort((a,b)=>b.t-a.t).slice(0,60),tot=S.expenses.filter(inV).filter(e=>dk(e.t)===d0).reduce((a,e)=>a+e.amt,0);
+ return`<button class="btn" data-a="addexp" style="margin-bottom:12px">${t('addExp')}</button><div class="tile a" style="margin-bottom:12px"><small>${t('expToday')}</small><b>${fmt(tot)}</b></div><div class="card">${es.length?es.map(e=>`<div class="row"><div>${esc(e.label)}<small>${e.cat?esc(e.cat)+' · ':''}${hm(e.t)} · ${esc(e.by||'-')}${curBr()==='all'?' · '+esc(brName(e.br)):''}</small></div><span style="display:flex;gap:6px;align-items:center"><b>${fmt(e.amt)}</b>${isBoss()&&e.led?`<button class="btn sm d" data-a="expvoid" data-id="${e.id}" data-br="${e.br}">✕</button>`:''}</span></div>`).join(''):`<div class="empty">${t('none')}</div>`}</div>`}
+const pendN=()=>S.users.filter(u=>u.status==='pending').length;
+function pendHtml(){const l=S.users.filter(u=>u.status==='pending');return l.length?`<div class="card tile a"><h3>⏳ ${t('pendingT')}</h3>${l.map(u=>`<div class="row"><div><b>${esc(u.name)}</b><small>${esc(u.email)} · ${esc(brName(u.branch))}</small></div><span style="display:flex;gap:6px"><button class="btn sm" data-a="approve" data-id="${u.id}">${t('approve')}</button><button class="btn sm d" data-a="reject" data-id="${u.id}">${t('reject')}</button></span></div>`).join('')}</div>`:''}
 const back=()=>`<button class="btn sm s" data-a="sub" data-k="" style="margin-bottom:12px">${t('back')}</button>`;
 function vMore(){
- if(!isBoss()&&sub&&sub!=='debts')sub='';
+ if(!isBoss()&&sub&&sub!=='debts'&&sub!=='exp')sub='';
  if(sub==='rep')return vReports();
- if(sub==='staff')return back()+`<button class="btn" data-a="staffform" style="margin-bottom:12px">${t('addStaff')}</button><div class="card">${S.users.map(u=>`<div class="row"><div><b>${esc(u.name)}</b> <span class="badge st-${u.role==='boss'?'ready':'wash'}">${t('role_'+u.role)}</span><small>${esc(u.email)} · ${u.role==='boss'?t('allShort'):esc(brName(u.branch))}${u.active===false?' · '+t('inactive'):''}</small></div><span style="display:flex;gap:6px"><button class="btn sm s" data-a="resetpw" data-e="${esc(u.email)}">${t('resetPw')}</button>${u.role==='boss'?'':`<button class="btn sm s" data-a="chbr" data-id="${u.id}">↔</button><button class="btn sm ${u.active===false?'':'d'}" data-a="togglestaff" data-id="${u.id}">${u.active===false?t('active'):t('inactive')}</button>`}</span></div>`).join('')}</div>`;
+ if(sub==='staff')return back()+`${pendHtml()}<button class="btn" data-a="staffform" style="margin-bottom:12px">${t('addStaff')}</button><div class="card">${S.users.filter(u=>u.status!=='pending').map(u=>`<div class="row"><div><b>${esc(u.name)}</b> <span class="badge st-${u.role==='boss'?'ready':'wash'}">${t('role_'+u.role)}</span><small>${esc(u.email)} · ${u.role==='boss'?t('allShort'):esc(brName(u.branch))}${u.active===false?' · '+t('inactive'):''}</small></div><span style="display:flex;gap:6px"><button class="btn sm s" data-a="resetpw" data-e="${esc(u.email)}">${t('resetPw')}</button>${u.role==='boss'?'':`<button class="btn sm s" data-a="chbr" data-id="${u.id}">↔</button><button class="btn sm ${u.active===false?'':'d'}" data-a="togglestaff" data-id="${u.id}">${u.active===false?t('active'):t('inactive')}</button>`}</span></div>`).join('')}</div>`;
  if(sub==='mat'){const MV=S.materials.filter(inV),tv=MV.reduce((a,m)=>a+m.qty*m.cost,0);return back()+`<button class="btn" data-a="matform" style="margin-bottom:12px">${t('addMat')}</button><div class="tile g" style="margin-bottom:12px"><small>${t('matValue')}</small><b>${fmt(tv)}</b></div><div class="card">${MV.length?MV.map(m=>`<div class="row"><div><b>${esc(m.name)}</b><small>${m.qty} × ${fmt(m.cost)}${curBr()==='all'?' · '+esc(brName(m.br)):''}</small></div><span style="display:flex;gap:6px"><button class="btn sm s" data-a="matuse" data-id="${m.id}">−</button><button class="btn sm" data-a="matrestock" data-id="${m.id}">+</button><button class="btn sm s" data-a="matform" data-id="${m.id}">✎</button></span></div>`).join(''):`<div class="empty">${t('nodata')}</div>`}</div>`}
  if(sub==='prices')return back()+`<button class="btn" data-a="svcform" style="margin-bottom:12px">${t('addSvc')}</button><div class="card">${S.services.map(s=>`<div class="row"><div><b>${esc(s.name)}</b><small>${fmt(s.price)} / ${esc(s.unit)}</small></div><button class="btn sm s" data-a="svcform" data-id="${s.id}">✎</button></div>`).join('')}</div>`;
  if(sub==='debts'){const l=VJ().filter(j=>!j.void&&jbal(j)>0);return back()+`<div class="card"><h3>${t('debts')}</h3>${l.length?l.map(j=>`<div class="row"><div><b>#${j.no} ${esc(j.cust)}</b><small>${fmt(jbal(j))} · ${esc(j.phone||'')}${j.credit?' · 💳 '+dd(j.credit.payBy):''}</small></div><span style="display:flex;gap:6px"><button class="btn sm" data-a="addpay" data-id="${j.id}">${t('addPay')}</button></span></div>`).join(''):`<div class="empty">${t('none')}</div>`}</div>`}
- if(sub==='exp'){const es=S.expenses.filter(inV).reverse().slice(0,40);return back()+`<button class="btn" data-a="addexp" style="margin-bottom:12px">${t('addExp')}</button><div class="card">${es.length?es.map(e=>`<div class="row"><div>${esc(e.label)}<small>${hm(e.t)} · ${esc(e.by||'-')}${curBr()==='all'?' · '+esc(brName(e.br)):''}</small></div><b>${fmt(e.amt)}</b></div>`).join(''):`<div class="empty">${t('none')}</div>`}</div>`}
+ if(sub==='exp')return back()+vExp();
  if(sub==='close'){const d=today(),cb=curBr();if(cb==='all')return back()+`<div class="card">${t('pickBr')}</div>`+S.branches.map(b=>`<button class="btn s" data-a="view" data-k="${b.id}" style="margin-bottom:8px">🏬 ${esc(b.name)}</button>`).join('');const s=stats(d),cl=S.closes.find(c=>c.day===d&&c.br===cb);return back()+`<div class="card"><h3>${t('closeDay')}</h3><div class="row"><span>${t('cash')}</span><b>${fmt(s.cash)}</b></div><div class="row"><span>− ${t('expenses')}</span><b>${fmt(s.exp)}</b></div><div class="row"><b>${t('expCash')}</b><b>${fmt(s.cashExp)}</b></div>
   ${cl?`<p>${t('counted')}: <b>${fmt(cl.counted)}</b><br>${diffTxt(cl.counted-cl.expected)}</p>`:`<form data-f="close"><label>${t('counted')}</label><input name="c" type="number" min="0" inputmode="numeric" required><button class="btn">${t('closeDay')}</button></form>`}</div>`}
  if(sub==='set')return back()+`<div class="card"><label>${t('shop')}</label><input data-s="shop" value="${esc(S.shop)}"><label>${t('ownerPh')}</label><input data-s="ownerPhone" type="tel" inputmode="tel" placeholder="79 123 456" value="${esc(S.ownerPhone)}"><label class="chk"><input type="checkbox" data-s="waAuto" ${S.waAuto!==false?'checked':''}><span>${t('waAuto')}</span></label></div>
   <div class="card"><h3>${t('brNames')}</h3>${S.branches.map(b=>`<label>${esc(b.code)}</label><input data-sb="${b.id}" value="${esc(b.name)}">`).join('')}</div>
   <div class="card"><h3>${t('backup')}</h3><button class="btn" data-a="download">${t('download')}</button></div>`;
- return`<div class="menu">${(isBoss()?[['rep','📈',t('reports')],['debts','💳',t('debts')],['exp','🧾',t('expenses')],['prices','🏷️',t('prices')],['mat','🧴',t('materials')],['close','🔒',t('closeDay')],['staff','👥',t('staff')],['set','⚙️',t('settings')]]:[['debts','💳',t('debts')]]).map(([k,i,l])=>`<button class="btn s" data-a="sub" data-k="${k}">${i} ${l}</button>`).join('')}<button class="btn s" data-a="lang">🌐 ${t('lang')}</button><button class="btn s" data-a="signout">🚪 ${t('signout')}</button></div><p style="color:var(--m);font-size:13px">${t('hint')}</p>`}
+ return`<div class="menu">${(isBoss()?[['rep','📈',t('reports')],['debts','💳',t('debts')],['exp','🧾',t('expenses')],['prices','🏷️',t('prices')],['mat','🧴',t('materials')],['close','🔒',t('closeDay')],['staff','👥',t('staff')+(pendN()?' ('+pendN()+' ⏳)':'')],['set','⚙️',t('settings')]]:[['exp','🧾',t('expenses')],['debts','💳',t('debts')]]).map(([k,i,l])=>`<button class="btn s" data-a="sub" data-k="${k}">${i} ${l}</button>`).join('')}<button class="btn s" data-a="lang">🌐 ${t('lang')}</button><button class="btn s" data-a="signout">🚪 ${t('signout')}</button></div><p style="color:var(--m);font-size:13px">${t('hint')}</p>`}
 
 /* ---------- RENDER ---------- */
 function renderChrome(){
@@ -491,13 +519,13 @@ function renderChrome(){
  if(STATE!=='app'||!ME){$('#nav').innerHTML='';$('#who').innerHTML='';$('#brbar').innerHTML='';return}
  $('#who').innerHTML=`${esc(ME.name)} · ${t('role_'+ME.role)}<br><button class="btn sm s" data-a="signout" style="padding:3px 8px;min-height:28px;font-size:12px">${t('signout')}</button>`;
  $('#brbar').innerHTML=ME.role==='boss'?(S.branches.length>1?`<button class="bchip ${S.view==='all'?'on':''}" style="background:${S.view==='all'?'#1b2229':''}" data-a="view" data-k="all">${t('allShort')}</button>`+S.branches.map(b=>`<button class="bchip ${S.view===b.id?'on':''}" style="${S.view===b.id?'background:'+brCol(b.id):''}" data-a="view" data-k="${b.id}">${esc(b.name)}</button>`).join(''):''):`<span class="bchip on" style="background:${brCol(ME.branch)}">🏬 ${esc(brName(ME.branch))}</span>`;
- const T=isBoss()?[['new','➕','new'],['jobs','🧺','jobs'],['feed','📣','feed'],['today','📊','today'],['more','⋯','more']]:[['new','➕','new'],['jobs','🧺','jobs'],['more','⋯','more']];
+ const T=isBoss()?[['new','➕','new'],['jobs','🧺','jobs'],['feed','📣','feed'],['today','📊','today'],['more','⋯','more']]:[['new','➕','new'],['jobs','🧺','jobs'],['exp','🧾','expenses'],['more','⋯','more']];
  if(!T.some(x=>x[0]===tab))tab='new';
  const n=isBoss()?alertsN():0,un=isBoss()&&tab!=='feed'?S.events.filter(e=>inV(e)&&e.t>S.seen&&e.by!==ME.name).length:0;
- $('#nav').innerHTML=T.map(([k,i,l])=>`<button class="${tab===k?'on':''}" data-a="tab" data-k="${k}"><b>${i}</b>${t(l)}${k==='today'&&n?`<i>${n}</i>`:''}${k==='feed'&&un?`<i>${un}</i>`:''}</button>`).join('')}
+ $('#nav').innerHTML=T.map(([k,i,l])=>`<button class="${tab===k?'on':''}" data-a="tab" data-k="${k}"><b>${i}</b>${t(l)}${k==='today'&&n?`<i>${n}</i>`:''}${k==='feed'&&un?`<i>${un}</i>`:''}${k==='more'&&isBoss()&&pendN()?`<i>${pendN()}</i>`:''}</button>`).join('')}
 function render(){renderChrome();
  if(STATE!=='app'||!ME){$('#app').innerHTML=vState();return}
- $('#app').innerHTML={new:vNew,jobs:vJobs,feed:vFeed,today:vToday,more:vMore}[tab]()}
+ $('#app').innerHTML={new:vNew,jobs:vJobs,exp:vExp,feed:vFeed,today:vToday,more:vMore}[tab]()}
 function refresh(){
  if(STATE!=='app'){render();return}
  const ae=typeof document!=='undefined'&&document.activeElement,typing=ae&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName||'');
@@ -514,6 +542,11 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b
  if(a==='tab'){tab=b.dataset.k;sub='';render();scrollTo(0,0)}
  else if(a==='view'){S.view=b.dataset.k;render();scrollTo(0,0)}
  else if(a==='print'){window.print()}
+ else if(a==='expvoid'){const x=S.expenses.find(q=>q.id===id);if(x)sheet(`<h3>${t('void_')} · ${esc(x.label)}</h3><div class="row"><span>${t('amount')}</span><b>${fmt(x.amt)}</b></div><button class="btn d">${t('void_')}</button>`,d=>{A('ledger',{type:'expvoid',eid:id,label:x.label},b.dataset.br)})}
+ else if(a==='gosignup'){STATE='signup';render();scrollTo(0,0)}
+ else if(a==='backlogin'){STATE='login';render()}
+ else if(a==='approve'){const u=S.users.find(x=>x.id===id);FB.setActive(id,true);A('admin',{type:'staff',text:L(`Employé approuvé : ${u.name} (${brName(u.branch)})`,`Staff approved: ${u.name} (${brName(u.branch)})`)},u.branch);toast('✔ '+u.name)}
+ else if(a==='reject'){const u=S.users.find(x=>x.id===id);FB.reject(id);A('admin',{type:'staff',text:L(`Demande refusée : ${u.name}`,`Request declined: ${u.name}`)},u.branch)}
  else if(a==='csv')downloadCsv();
  else if(a==='chbr'){const u=S.users.find(x=>x.id===id);sheet(`<h3>${t('changeBr')} · ${esc(u.name)}</h3><label>${t('branch')}</label><select name="br" required>${S.branches.map(b=>`<option value="${b.id}" ${u.branch===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select><button class="btn">${t('save')}</button>`,d=>{FB.setBranch(id,d.br);A('admin',{type:'staff',text:L(`${u.name} → ${brName(d.br)}`,`${u.name} → ${brName(d.br)}`)},d.br)})}
  else if(a==='sub'){sub=b.dataset.k;render()}
@@ -543,7 +576,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b
    A('ledger',{type:'pay',jid:j.id,amt:+d.a,m:d.m,k:'balance'},j.br);waitFor(()=>{const x=job(j.id);return x&&x.pay.length>n0?x:null}).then(x=>x&&receiptSheet(x,'pay'))})}
  else if(a==='voidjob'){const j=job(id);sheet(`<h3>${t('void_')} · #${j.no}</h3>${jpaid(j)>0?`<p class="bad">${t('refund')}: ${fmt(jpaid(j))}</p>`:''}<label>${t('reason')}</label><input name="r" required><button class="btn d">${t('void_')}</button>`,d=>{
    if(jpaid(j)>0)A('ledger',{type:'pay',jid:j.id,amt:-jpaid(j),m:'cash',k:'refund'},j.br);A('ledger',{type:'void',jid:j.id,reason:d.r.trim()},j.br)})}
- else if(a==='addexp')sheet(`<h3>${t('addExp')}</h3><label>${t('label')}</label><input name="l" required><label>${t('amount')}</label><input name="a" type="number" min="1" inputmode="numeric" required>${brField()}<button class="btn">${t('save')}</button>`,d=>{A('admin',{type:'expense',label:d.l.trim(),amt:+d.a},pickBr(d))});
+ else if(a==='addexp')sheet(`<h3>${t('addExp')}</h3><label>${t('label')}</label><input name="l" required><label>${t('amount')}</label><input name="a" type="number" min="1" inputmode="numeric" required><label>${t('category')}</label><select name="c">${['',...L(['Produits (savon, etc.)','Transport','Eau / Électricité','Repas','Réparation','Salaire / Avance','Autre'],['Supplies (soap, etc.)','Transport','Water / Electricity','Meals','Repairs','Salary / Advance','Other'])].map(x=>`<option value="${x}">${x||t('catSel')}</option>`).join('')}</select>${brField()}<button class="btn">${t('save')}</button>`,d=>{A('ledger',{type:'expense',label:d.l.trim(),amt:+d.a,cat:d.c||''},pickBr(d));toast(t('saved'))});
  else if(a==='svcform'){const s=id?svc(id):null;sheet(`<h3>${t('prices')}</h3><label>${t('sname')}</label><input name="n" required value="${s?esc(s.name):''}"><label>${t('unit')}</label><input name="u" required value="${s?esc(s.unit):'pièce'}"><label>${t('price')}</label><input name="p" type="number" min="0" inputmode="numeric" required value="${s?s.price:''}"><button class="btn">${t('save')}</button>${s?`<button type="button" class="btn d" data-a="svcdel" data-id="${s.id}" style="margin-top:8px">${t('del')}</button>`:''}`,d=>{
    const list=S.services.map(x=>Object.assign({},x));if(s){const x=list.find(y=>y.id===s.id);x.name=d.n.trim();x.unit=d.u.trim();x.price=+d.p}else list.push({id:uid(),name:d.n.trim(),unit:d.u.trim(),price:+d.p});FB.saveSettings({services:list})})}
  else if(a==='svcdel'){FB.saveSettings({services:S.services.filter(x=>x.id!==id)});delete draft.items[id];closeSheet()}
@@ -566,7 +599,8 @@ document.addEventListener('change',e=>{const el=e.target;
 document.addEventListener('submit',async e=>{const f=e.target.closest('[data-f]');if(!f)return;e.preventDefault();const k=f.dataset.f;
  if(k==='close'){const d=today(),br=wb();if(!br)return;const s=stats(d,br);A('admin',{type:'close',day:d,expected:s.cashExp,counted:+f.elements.c.value},br)}
  else if(k==='login')await doLogin(f);
- else if(k==='setup')await doSetup(f)});
+ else if(k==='setup')await doSetup(f);
+ else if(k==='signup')await doSignup(f)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
 netBanner();boot();
 
